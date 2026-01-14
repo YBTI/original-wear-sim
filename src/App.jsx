@@ -1,16 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Stage, Layer, Rect, Image as KonvaImage, Transformer, Group } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Transformer, Group } from 'react-konva';
 import useImage from 'use-image';
 
 // --- 設定値 ---
 const STAGE_WIDTH = 500;
 const STAGE_HEIGHT = 600;
 
+// 📏 サイズ計算用の設定 (ここを追加)
+const REAL_WEAR_WIDTH_MM = 500; // 服の実寸幅 (例: 60cm = 600mm)
+const PX_PER_MM = STAGE_WIDTH / REAL_WEAR_WIDTH_MM; // 1mmあたりのピクセル数
+
+// 目標のステッカーサイズ (45mm x 60mm)
+const STICKER_TARGET_WIDTH_MM = 45;
+const STICKER_TARGET_HEIGHT_MM = 60;
+
 // カテゴリー定義
 const CATEGORIES = [
   { id: 'all', label: 'すべて' },
+  { id: 'free', label: '無料配布' },
   { id: 'text', label: '英数字' },
-  { id: 'illustration', label: 'イラスト' },
+  { id: 'mac', label: 'T-MAC' },
   { id: 'basketball', label: 'バスケット' },
 ];
 
@@ -28,30 +37,27 @@ const REGISTERED_STICKERS = [
   { id: 9, url: "/stickers/text_08.png", name: "08", category: 'text' },
   { id: 10, url: "/stickers/text_09.png", name: "09", category: 'text' },
   
-  // --- イラスト ---
-  { id: 11, url: "/stickers/rz_01.png", name: "Star01", category: 'illustration' },
-  { id: 12, url: "/stickers/rz_02.png", name: "Star02", category: 'illustration' },
-  { id: 13, url: "/stickers/rz_03.png", name: "Star03", category: 'illustration' },
-  { id: 14, url: "/stickers/rz_04.png", name: "Star04", category: 'illustration' },
-  { id: 15, url: "/stickers/rz_05.png", name: "Star05", category: 'illustration' },
+  // --- 無料配布 ---
+  { id: 11, url: "/stickers/free_01.png", name: "Star01", category: 'free' },
+  { id: 12, url: "/stickers/free_02.png", name: "Star02", category: 'free' },
+  { id: 13, url: "/stickers/free_03.png", name: "Star03", category: 'free' },
   
   // --- バスケット ---
-  { id: 16, url: "/stickers/basket_ball_01.png", name: "Ball01", category: 'basketball' },
-  { id: 17, url: "/stickers/basket_ball_02.png", name: "Ball02", category: 'basketball' },
-  { id: 18, url: "/stickers/basket_ball_03.png", name: "Ball03", category: 'basketball' },
-  { id: 19, url: "/stickers/basket_ball_04.png", name: "Ball04", category: 'basketball' },
+  { id: 14, url: "/stickers/basket_ball_01.png", name: "Ball01", category: 'basketball' },
+  { id: 15, url: "/stickers/basket_ball_02.png", name: "Ball02", category: 'basketball' },
+  { id: 16, url: "/stickers/basket_ball_03.png", name: "Ball03", category: 'basketball' },
+  { id: 17, url: "/stickers/basket_ball_04.png", name: "Ball04", category: 'basketball' },
+
+  // --- マック ---
+  { id: 18, url: "/stickers/mac_01.png", name: "00", category: 'mac' },
+  { id: 19, url: "/stickers/mac_02.png", name: "01", category: 'mac' },
+  { id: 20, url: "/stickers/mac_03.png", name: "02", category: 'mac' },
+  { id: 21, url: "/stickers/mac_04.png", name: "03", category: 'mac' },
+  { id: 22, url: "/stickers/mac_05.png", name: "04", category: 'mac' },
+  { id: 23, url: "/stickers/mac_06.png", name: "05", category: 'mac' },
 ];
 
-// 服のカラーパレット
-const FABRIC_COLORS = [
-  { name: "ホワイト", hex: "#ffffff", opacity: 0 },
-  { name: "グレー",   hex: "#808080", opacity: 0.5 },
-  { name: "ベージュ", hex: "#dccbba", opacity: 0.6 },
-  { name: "ネイビー", hex: "#1d2951", opacity: 0.7 },
-  { name: "ブラック", hex: "#222222", opacity: 0.85 },
-];
-
-// ベース服の画像設定
+// ベース服の画像設定（ご自身の画像パスに合わせてください）
 const WEAR_CONFIG = {
   hoodie: {
     front: "/wear/hoodie_front.png", 
@@ -94,23 +100,25 @@ const StickerItem = ({ shapeProps, isSelected, onSelect, onChange }) => {
         }}
         onTransformEnd={(e) => {
           const node = shapeRef.current;
-          const scaleX = node.scaleX();
-          const scaleY = node.scaleY();
+          // スケール変更は無効化していますが、回転情報はここで取得します
           onChange({
             ...shapeProps,
             x: node.x(),
             y: node.y(),
             rotation: node.rotation(),
-            scaleX: scaleX,
-            scaleY: scaleY,
+            // scaleは変更されないはずですが、念のため現状維持
+            scaleX: node.scaleX(),
+            scaleY: node.scaleY(),
           });
         }}
       />
       {isSelected && (
         <Transformer
           ref={trRef}
+          resizeEnabled={false} // ★サイズ変更を無効化
+          rotateEnabled={true}  // ★回転は有効
+          enabledAnchors={[]}   // ★リサイズ用のハンドル（四角）を全て非表示にする
           boundBoxFunc={(oldBox, newBox) => {
-            if (newBox.width < 5 || newBox.height < 5) return oldBox;
             return newBox;
           }}
         />
@@ -122,7 +130,7 @@ const StickerItem = ({ shapeProps, isSelected, onSelect, onChange }) => {
 const App = () => {
   const [wearType, setWearType] = useState('hoodie');
   const [viewSide, setViewSide] = useState('front');
-  const [selectedColor, setSelectedColor] = useState(FABRIC_COLORS[0]);
+  // ★カラー管理のStateは削除しました
   const [currentCategory, setCurrentCategory] = useState('all');
   
   const [stickers, setStickers] = useState([]);
@@ -134,15 +142,19 @@ const App = () => {
     if (clickedOnEmpty) selectSticker(null);
   };
 
-  // ステッカー追加
+// ステッカー追加
   const addSticker = (stickerUrl) => {
     const newSticker = {
       src: stickerUrl,
-      x: STAGE_WIDTH / 2 - 50,
-      y: STAGE_HEIGHT / 2 - 50,
-      width: 100,
-      height: 100,
-      id: 'sticker-' + Date.now() + Math.random(), // 追加時のIDも重複しないように念のため乱数追加
+      // 初期位置（中央）
+      x: STAGE_WIDTH / 2 - (STICKER_TARGET_WIDTH_MM * PX_PER_MM) / 2,
+      y: STAGE_HEIGHT / 2 - (STICKER_TARGET_HEIGHT_MM * PX_PER_MM) / 2,
+      
+      // ★ここを修正：ミリ数をピクセルに変換して指定
+      width: STICKER_TARGET_WIDTH_MM * PX_PER_MM,   // 45mm分
+      height: STICKER_TARGET_HEIGHT_MM * PX_PER_MM, // 60mm分
+      
+      id: 'sticker-' + Date.now() + Math.random(),
       rotation: 0,
       scaleX: 1,
       scaleY: 1,
@@ -240,21 +252,13 @@ const App = () => {
           {/* ベース設定 */}
           <div style={{ background: 'white', padding: 15, borderRadius: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
             <h3>1. ベース設定</h3>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setWearType('hoodie')} style={{ flex: 1, padding: 8, background: wearType === 'hoodie' ? '#333' : '#eee', color: wearType === 'hoodie' ? '#fff' : '#000', borderRadius: 4, border: 'none' }}>パーカー</button>
               <button onClick={() => setWearType('trainer')} style={{ flex: 1, padding: 8, background: wearType === 'trainer' ? '#333' : '#eee', color: wearType === 'trainer' ? '#fff' : '#000', borderRadius: 4, border: 'none' }}>トレーナー</button>
             </div>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 15 }}>
+            <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
               <button onClick={() => { setViewSide('front'); selectSticker(null); }} style={{ flex: 1, padding: 8, background: viewSide === 'front' ? '#007bff' : '#eee', color: viewSide === 'front' ? '#fff' : '#000', borderRadius: 4, border: 'none' }}>前</button>
               <button onClick={() => { setViewSide('back'); selectSticker(null); }} style={{ flex: 1, padding: 8, background: viewSide === 'back' ? '#007bff' : '#eee', color: viewSide === 'back' ? '#fff' : '#000', borderRadius: 4, border: 'none' }}>後</button>
-            </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {FABRIC_COLORS.map((color) => (
-                <div key={color.name} onClick={() => setSelectedColor(color)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', width: '50px' }}>
-                  <div style={{ width: 30, height: 30, background: color.hex, borderRadius: '50%', border: selectedColor.name === color.name ? '3px solid #007bff' : '1px solid #ddd', marginBottom: 5 }} />
-                  <span style={{ fontSize: '10px' }}>{color.name}</span>
-                </div>
-              ))}
             </div>
           </div>
 
@@ -316,9 +320,10 @@ const App = () => {
           <Stage width={STAGE_WIDTH} height={STAGE_HEIGHT} onMouseDown={checkDeselect} onTouchStart={checkDeselect}>
             <Layer>
               <Group>
+                {/* 服の画像のみ表示（カラーオーバーレイは削除済み） */}
                 <UrlImage src={WEAR_CONFIG[wearType][viewSide]} x={0} y={0} width={STAGE_WIDTH} height={STAGE_HEIGHT} />
-                <Rect x={0} y={0} width={STAGE_WIDTH} height={STAGE_HEIGHT} fill={selectedColor.hex} opacity={selectedColor.opacity} globalCompositeOperation="source-atop" listening={false} />
               </Group>
+              
               {currentCanvasStickers.map((sticker, i) => {
                 const realIndex = stickers.findIndex(s => s.id === sticker.id);
                 return (
