@@ -7,8 +7,8 @@ const BASE_WIDTH = 500;
 const BASE_HEIGHT = 600;
 
 // 📏 サイズ計算用の設定
-const REAL_WEAR_WIDTH_MM = 500; // 服の実寸幅 (例: 60cm = 600mm)
-const PX_PER_MM = BASE_WIDTH / REAL_WEAR_WIDTH_MM; // 1mmあたりのピクセル数
+const REAL_WEAR_WIDTH_MM = 500; 
+const PX_PER_MM = BASE_WIDTH / REAL_WEAR_WIDTH_MM; 
 
 // 目標のステッカーサイズ (45mm x 60mm)
 const STICKER_TARGET_WIDTH_MM = 45;
@@ -113,8 +113,8 @@ const StickerItem = ({ shapeProps, isSelected, onSelect, onChange }) => {
       {isSelected && (
         <Transformer
           ref={trRef}
-          resizeEnabled={false} // サイズ変更無効
-          rotateEnabled={true}  // 回転のみ有効
+          resizeEnabled={false} 
+          rotateEnabled={true}  
           enabledAnchors={[]}
           boundBoxFunc={(oldBox, newBox) => newBox}
         />
@@ -133,21 +133,19 @@ const App = () => {
   // ★画面幅に合わせて縮小するためのState
   const [stageScale, setStageScale] = useState(1);
 
-  // 画面リサイズ時にスケールを再計算
+  // ★修正：より安全な縮小ロジックに変更
   useEffect(() => {
     const handleResize = () => {
-      // 画面幅から少し余白(40px)を引いた幅を計算
-      const availableWidth = window.innerWidth - 40;
+      // 画面の横幅の90%（左右に5%ずつの余白）を最大幅とする
+      const maxSafeWidth = window.innerWidth * 0.9;
       
-      // もし画面幅が基準(500px)より小さい場合、縮小倍率を計算
-      if (availableWidth < BASE_WIDTH) {
-        setStageScale(availableWidth / BASE_WIDTH);
-      } else {
-        setStageScale(1); // PCなどは等倍
-      }
+      // 基準サイズ(500px)と比較して、小さい方の倍率を採用
+      // Math.min(1, ...) とすることで、PCなどで拡大されるのを防ぎます
+      const scale = Math.min(1, maxSafeWidth / BASE_WIDTH);
+      
+      setStageScale(scale);
     };
 
-    // 初回実行とイベントリスナー登録
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -161,7 +159,7 @@ const App = () => {
   const addSticker = (stickerUrl) => {
     const newSticker = {
       src: stickerUrl,
-      // 中央配置（内部座標は500x600基準のまま計算）
+      // 中央配置
       x: BASE_WIDTH / 2 - (STICKER_TARGET_WIDTH_MM * PX_PER_MM) / 2,
       y: BASE_HEIGHT / 2 - (STICKER_TARGET_HEIGHT_MM * PX_PER_MM) / 2,
       
@@ -206,19 +204,26 @@ const App = () => {
   return (
     <div className="app-container">
       <style>{`
+        /* 全要素に box-sizing を適用してパディングによる肥大化を防止 */
+        *, *::before, *::after {
+          box-sizing: border-box;
+        }
+
         .app-container {
           display: flex;
           flex-direction: column;
           align-items: center;
-          padding: 10px; /* スマホ用に余白を縮小 */
+          padding: 10px;
           background: #f5f5f5;
           min-height: 100vh;
           font-family: sans-serif;
+          width: 100%; /* 全幅指定 */
+          overflow-x: hidden; /* 横スクロール防止 */
         }
         .app-title {
           margin-bottom: 10px;
           color: #333;
-          font-size: 18px; /* スマホ用に文字サイズ縮小 */
+          font-size: 18px; 
           font-weight: bold;
         }
         .main-layout {
@@ -227,6 +232,8 @@ const App = () => {
           justify-content: center;
           align-items: flex-start;
           flex-direction: row;
+          width: 100%;
+          max-width: 900px; /* PCでの広がりすぎ防止 */
         }
         .control-panel {
           width: 340px;
@@ -238,15 +245,16 @@ const App = () => {
           border: 1px solid #ccc;
           background: white;
           box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-          /* はみ出し防止 */
-          max-width: 100%; 
+          /* 重要：キャンバスエリア自体も画面幅を超えないように制限 */
+          max-width: 95vw; 
           overflow: hidden;
+          display: flex;
+          justify-content: center; /* 中身を中央寄せ */
         }
         @media (max-width: 768px) {
           .main-layout {
-            flex-direction: column-reverse; /* 縦並び */
+            flex-direction: column-reverse;
             align-items: center;
-            width: 100%;
           }
           .control-panel {
             width: 100%;
@@ -326,13 +334,11 @@ const App = () => {
           </div>
         </div>
 
-        {/* キャンバスエリア (★Scaleを適用) */}
+        {/* キャンバスエリア */}
         <div className="canvas-area">
           <Stage 
-            // 見た目のサイズを縮小
             width={BASE_WIDTH * stageScale} 
             height={BASE_HEIGHT * stageScale} 
-            // 内部の描画全体を縮小
             scaleX={stageScale}
             scaleY={stageScale}
             onMouseDown={checkDeselect} 
