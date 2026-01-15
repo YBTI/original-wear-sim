@@ -2,13 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Stage, Layer, Image as KonvaImage, Transformer, Group } from 'react-konva';
 import useImage from 'use-image';
 
-// --- 設定値 ---
-const STAGE_WIDTH = 500;
-const STAGE_HEIGHT = 600;
+// --- 設定値（内部的な基準サイズ） ---
+const BASE_WIDTH = 500;
+const BASE_HEIGHT = 600;
 
-// 📏 サイズ計算用の設定 (ここを追加)
+// 📏 サイズ計算用の設定
 const REAL_WEAR_WIDTH_MM = 500; // 服の実寸幅 (例: 60cm = 600mm)
-const PX_PER_MM = STAGE_WIDTH / REAL_WEAR_WIDTH_MM; // 1mmあたりのピクセル数
+const PX_PER_MM = BASE_WIDTH / REAL_WEAR_WIDTH_MM; // 1mmあたりのピクセル数
 
 // 目標のステッカーサイズ (45mm x 60mm)
 const STICKER_TARGET_WIDTH_MM = 45;
@@ -19,7 +19,7 @@ const CATEGORIES = [
   { id: 'all', label: 'すべて' },
   { id: 'free', label: '無料配布' },
   { id: 'text', label: '英数字' },
-  { id: 'mac', label: 'T-MAC' },
+  { id: 'mac', label: 'MAC-T' },
   { id: 'basketball', label: 'バスケット' },
 ];
 
@@ -57,7 +57,7 @@ const REGISTERED_STICKERS = [
   { id: 23, url: "/stickers/mac_06.png", name: "05", category: 'mac' },
 ];
 
-// ベース服の画像設定（ご自身の画像パスに合わせてください）
+// ベース服の画像設定
 const WEAR_CONFIG = {
   hoodie: {
     front: "/wear/hoodie_front.png", 
@@ -100,13 +100,11 @@ const StickerItem = ({ shapeProps, isSelected, onSelect, onChange }) => {
         }}
         onTransformEnd={(e) => {
           const node = shapeRef.current;
-          // スケール変更は無効化していますが、回転情報はここで取得します
           onChange({
             ...shapeProps,
             x: node.x(),
             y: node.y(),
             rotation: node.rotation(),
-            // scaleは変更されないはずですが、念のため現状維持
             scaleX: node.scaleX(),
             scaleY: node.scaleY(),
           });
@@ -115,12 +113,10 @@ const StickerItem = ({ shapeProps, isSelected, onSelect, onChange }) => {
       {isSelected && (
         <Transformer
           ref={trRef}
-          resizeEnabled={false} // ★サイズ変更を無効化
-          rotateEnabled={true}  // ★回転は有効
-          enabledAnchors={[]}   // ★リサイズ用のハンドル（四角）を全て非表示にする
-          boundBoxFunc={(oldBox, newBox) => {
-            return newBox;
-          }}
+          resizeEnabled={false} // サイズ変更無効
+          rotateEnabled={true}  // 回転のみ有効
+          enabledAnchors={[]}
+          boundBoxFunc={(oldBox, newBox) => newBox}
         />
       )}
     </>
@@ -130,29 +126,47 @@ const StickerItem = ({ shapeProps, isSelected, onSelect, onChange }) => {
 const App = () => {
   const [wearType, setWearType] = useState('hoodie');
   const [viewSide, setViewSide] = useState('front');
-  // ★カラー管理のStateは削除しました
   const [currentCategory, setCurrentCategory] = useState('all');
-  
   const [stickers, setStickers] = useState([]);
   const [selectedId, selectSticker] = useState(null);
 
-  // 選択解除
+  // ★画面幅に合わせて縮小するためのState
+  const [stageScale, setStageScale] = useState(1);
+
+  // 画面リサイズ時にスケールを再計算
+  useEffect(() => {
+    const handleResize = () => {
+      // 画面幅から少し余白(40px)を引いた幅を計算
+      const availableWidth = window.innerWidth - 40;
+      
+      // もし画面幅が基準(500px)より小さい場合、縮小倍率を計算
+      if (availableWidth < BASE_WIDTH) {
+        setStageScale(availableWidth / BASE_WIDTH);
+      } else {
+        setStageScale(1); // PCなどは等倍
+      }
+    };
+
+    // 初回実行とイベントリスナー登録
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const checkDeselect = (e) => {
     const clickedOnEmpty = e.target === e.target.getStage();
     if (clickedOnEmpty) selectSticker(null);
   };
 
-// ステッカー追加
   const addSticker = (stickerUrl) => {
     const newSticker = {
       src: stickerUrl,
-      // 初期位置（中央）
-      x: STAGE_WIDTH / 2 - (STICKER_TARGET_WIDTH_MM * PX_PER_MM) / 2,
-      y: STAGE_HEIGHT / 2 - (STICKER_TARGET_HEIGHT_MM * PX_PER_MM) / 2,
+      // 中央配置（内部座標は500x600基準のまま計算）
+      x: BASE_WIDTH / 2 - (STICKER_TARGET_WIDTH_MM * PX_PER_MM) / 2,
+      y: BASE_HEIGHT / 2 - (STICKER_TARGET_HEIGHT_MM * PX_PER_MM) / 2,
       
-      // ★ここを修正：ミリ数をピクセルに変換して指定
-      width: STICKER_TARGET_WIDTH_MM * PX_PER_MM,   // 45mm分
-      height: STICKER_TARGET_HEIGHT_MM * PX_PER_MM, // 60mm分
+      width: STICKER_TARGET_WIDTH_MM * PX_PER_MM,
+      height: STICKER_TARGET_HEIGHT_MM * PX_PER_MM,
       
       id: 'sticker-' + Date.now() + Math.random(),
       rotation: 0,
@@ -164,7 +178,6 @@ const App = () => {
     setStickers([...stickers, newSticker]);
   };
 
-  // ステッカー削除
   const deleteSelectedSticker = () => {
     if (!selectedId) return;
     const newStickers = stickers.filter(s => s.id !== selectedId);
@@ -197,15 +210,16 @@ const App = () => {
           display: flex;
           flex-direction: column;
           align-items: center;
-          padding: 20px;
+          padding: 10px; /* スマホ用に余白を縮小 */
           background: #f5f5f5;
           min-height: 100vh;
           font-family: sans-serif;
         }
         .app-title {
-          margin-bottom: 20px;
+          margin-bottom: 10px;
           color: #333;
-          font-size: 24px;
+          font-size: 18px; /* スマホ用に文字サイズ縮小 */
+          font-weight: bold;
         }
         .main-layout {
           display: flex;
@@ -224,20 +238,19 @@ const App = () => {
           border: 1px solid #ccc;
           background: white;
           box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+          /* はみ出し防止 */
+          max-width: 100%; 
+          overflow: hidden;
         }
         @media (max-width: 768px) {
           .main-layout {
-            flex-direction: column-reverse;
+            flex-direction: column-reverse; /* 縦並び */
             align-items: center;
             width: 100%;
           }
           .control-panel {
             width: 100%;
             max-width: 500px;
-          }
-          .canvas-area {
-            max-width: 100%;
-            overflow: hidden;
           }
         }
       `}</style>
@@ -249,7 +262,6 @@ const App = () => {
         {/* コントロールパネル */}
         <div className="control-panel">
           
-          {/* ベース設定 */}
           <div style={{ background: 'white', padding: 15, borderRadius: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
             <h3>1. ベース設定</h3>
             <div style={{ display: 'flex', gap: 10 }}>
@@ -262,7 +274,6 @@ const App = () => {
             </div>
           </div>
 
-          {/* ステッカー設定 */}
           <div style={{ background: 'white', padding: 15, borderRadius: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
             <h3>2. ステッカー配置</h3>
             
@@ -315,13 +326,21 @@ const App = () => {
           </div>
         </div>
 
-        {/* キャンバスエリア */}
+        {/* キャンバスエリア (★Scaleを適用) */}
         <div className="canvas-area">
-          <Stage width={STAGE_WIDTH} height={STAGE_HEIGHT} onMouseDown={checkDeselect} onTouchStart={checkDeselect}>
+          <Stage 
+            // 見た目のサイズを縮小
+            width={BASE_WIDTH * stageScale} 
+            height={BASE_HEIGHT * stageScale} 
+            // 内部の描画全体を縮小
+            scaleX={stageScale}
+            scaleY={stageScale}
+            onMouseDown={checkDeselect} 
+            onTouchStart={checkDeselect}
+          >
             <Layer>
               <Group>
-                {/* 服の画像のみ表示（カラーオーバーレイは削除済み） */}
-                <UrlImage src={WEAR_CONFIG[wearType][viewSide]} x={0} y={0} width={STAGE_WIDTH} height={STAGE_HEIGHT} />
+                <UrlImage src={WEAR_CONFIG[wearType][viewSide]} x={0} y={0} width={BASE_WIDTH} height={BASE_HEIGHT} />
               </Group>
               
               {currentCanvasStickers.map((sticker, i) => {
