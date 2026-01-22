@@ -19,7 +19,7 @@ const CATEGORIES = [
   { id: 'all', label: 'すべて' },
   { id: 'free', label: '無料配布' },
   { id: 'text', label: '英数字' },
-  { id: 'mac', label: 'MAC-T' },
+  { id: 'mac', label: 'T-MAC' },
   { id: 'basketball', label: 'バスケット' },
 ];
 
